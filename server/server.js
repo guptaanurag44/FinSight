@@ -1,6 +1,7 @@
 import express from "express";
 import cors from "cors"
 import authRoutes from "./routes/auth.js"
+import incomeRoutes from "./routes/income.js"
 
 const app=express();
 const PORT= process.env.PORT || 5000
@@ -12,6 +13,7 @@ app.get('/',(req,res)=>{
 })
 
 app.use('/api/auth',authRoutes)
+app.use('/api/income',incomeRoutes)
 
 app.listen(PORT,()=>{
     console.log(`server is running on port ${PORT}`);
