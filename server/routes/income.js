@@ -1,5 +1,4 @@
 import express from 'express'
-import pool from '../config/db.js'
 import authMiddleware from '../middlewares/auth_middleware.js'
 import { getIncomeSources,addIncomeSources,updateIncomeSources,deleteIncomeSources } from '../controllers/income.js'
 
