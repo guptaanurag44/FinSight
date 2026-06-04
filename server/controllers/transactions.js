@@ -59,109 +59,165 @@ export const getTransactions=async (req,res)=>{
 
 export const getSummary = async (req, res) => {
     const userId = req.user.id
-    const { month, year } = req.query
+    const { month, year, from, to } = req.query
+    let fromDate, toDate, period
 
-    const isYearly = year && !month
+    if (from && to) {
+      
+      fromDate = new Date(from)
+      toDate = new Date(to)
+
+      if (isNaN(fromDate.getTime()) || isNaN(toDate.getTime())) {
+        return res.status(400).json({ 
+          error: 'invalid date format — use YYYY-MM-DD' 
+        })
+      }
+      if (fromDate > toDate) {
+        return res.status(400).json({ 
+          error: 'from date cannot be after to date' 
+        })
+      }
+      period = 'range'
+
+    } else if (month && year) {
+      
+      fromDate = new Date(year, month - 1, 1)
+      toDate = new Date(year, month, 0)
+      period = 'monthly'
+
+    } else if (year && !month) {
+      
+      fromDate = new Date(year, 0, 1)
+      toDate = new Date(year, 11, 31)
+      period = 'yearly'
+
+    } else {
+      
+      const now = new Date()
+      fromDate = new Date(now.getFullYear(), now.getMonth(), 1)
+      toDate = new Date(now.getFullYear(), now.getMonth() + 1, 0)
+      period = 'monthly'
+    }
 
     try {
-      let recurringIncomeResult, oneTimeIncomeResult, expensesByCategoryResult
+      
+      const recurringIncomeResult = await pool.query(
+        `SELECT COALESCE(SUM(amount), 0) AS total
+        FROM income_sources
+        WHERE user_id = $1 
+        AND is_active = true 
+        AND frequency = 'monthly'
+        AND start_date <= $2`,
+        [userId, toDate]
+      )
 
-      if (isYearly) {
-        recurringIncomeResult = await pool.query(
-          `SELECT COALESCE(SUM(amount), 0) * 12 AS total
-          FROM income_sources
-          WHERE user_id = $1 
-          AND is_active = true 
-          AND frequency = 'monthly'`,
-          [userId]
-        )
+      
+      const oneTimeIncomeResult = await pool.query(
+        `SELECT COALESCE(SUM(amount), 0) AS total
+        FROM transactions
+        WHERE user_id = $1 
+        AND type = 'income'
+        AND date >= $2
+        AND date <= $3`,
+        [userId, fromDate, toDate]
+      )
 
-        oneTimeIncomeResult = await pool.query(
-          `SELECT COALESCE(SUM(amount), 0) AS total
-          FROM transactions
-          WHERE user_id = $1 
-          AND type = 'income'
-          AND EXTRACT(YEAR FROM date) = $2`,
-          [userId, year]
-        )
+      
+      const expensesByCategoryResult = await pool.query(
+        `SELECT 
+          COALESCE(c.name, 'Uncategorized') AS category,
+          COALESCE(c.color, '#888888') AS color,
+          SUM(t.amount) AS total
+        FROM transactions AS t
+        LEFT JOIN expense_categories AS c 
+          ON t.category_id = c.id
+        WHERE t.user_id = $1 
+        AND t.type = 'expense'
+        AND t.date >= $2
+        AND t.date <= $3
+        GROUP BY c.name, c.color
+        ORDER BY total DESC`,
+        [userId, fromDate, toDate]
+      )
 
-        expensesByCategoryResult = await pool.query(
-          `SELECT 
-            COALESCE(c.name, 'Uncategorized') AS category,
-            COALESCE(c.color, '#888888') AS color,
-            SUM(t.amount) AS total
-          FROM transactions AS t
-          LEFT JOIN expense_categories AS c 
-            ON t.category_id = c.id
-          WHERE t.user_id = $1 
-          AND t.type = 'expense'
-          AND EXTRACT(YEAR FROM t.date) = $2
-          GROUP BY c.name, c.color
-          ORDER BY total DESC`,
-          [userId, year]
-        )
+      
+      
+      const topExpenseCategory = expensesByCategoryResult.rows.length > 0
+        ? expensesByCategoryResult.rows[0]
+        : null
 
-      } else {
-        const m = month || new Date().getMonth() + 1
-        const y = year || new Date().getFullYear()
+      
+      const biggestTransactionResult = await pool.query(
+        `SELECT 
+          t.id,
+          t.amount,
+          t.type,
+          t.note,
+          t.date,
+          c.name AS category_name
+        FROM transactions AS t
+        LEFT JOIN expense_categories AS c 
+          ON t.category_id = c.id
+        WHERE t.user_id = $1
+        AND t.date >= $2
+        AND t.date <= $3
+        ORDER BY t.amount DESC
+        LIMIT 1`,
+        [userId, fromDate, toDate]
+      )
 
-        recurringIncomeResult = await pool.query(
-          `SELECT COALESCE(SUM(amount), 0) AS total
-          FROM income_sources
-          WHERE user_id = $1 
-          AND is_active = true 
-          AND frequency = 'monthly'`,
-          [userId]
-        )
+      
+      const incomeSourcesResult = await pool.query(
+        `SELECT 
+          label,
+          amount,
+          frequency
+        FROM income_sources
+        WHERE user_id = $1
+        AND is_active = true
+        AND start_date <= $2`,
+        [userId, toDate]
+      )
 
-        oneTimeIncomeResult = await pool.query(
-          `SELECT COALESCE(SUM(amount), 0) AS total
-          FROM transactions
-          WHERE user_id = $1 
-          AND type = 'income'
-          AND EXTRACT(MONTH FROM date) = $2
-          AND EXTRACT(YEAR FROM date) = $3`,
-          [userId, m, y]
-        )
+      const oneTimeIncomeBreakdownResult = await pool.query(
+        `SELECT 
+          COALESCE(note, 'One time income') AS label,
+          amount,
+          date
+        FROM transactions
+        WHERE user_id = $1
+        AND type = 'income'
+        AND date >= $2
+        AND date <= $3
+        ORDER BY amount DESC`,
+        [userId, fromDate, toDate]
+      )
 
-        expensesByCategoryResult = await pool.query(
-          `SELECT 
-            COALESCE(c.name, 'Uncategorized') AS category,
-            COALESCE(c.color, '#888888') AS color,
-            SUM(t.amount) AS total
-          FROM transactions AS t
-          LEFT JOIN expense_categories AS c 
-            ON t.category_id = c.id
-          WHERE t.user_id = $1 
-          AND t.type = 'expense'
-          AND EXTRACT(MONTH FROM t.date) = $2
-          AND EXTRACT(YEAR FROM t.date) = $3
-          GROUP BY c.name, c.color
-          ORDER BY total DESC`,
-          [userId, m, y]
-        )
-      }
-
+      
       const totalIncome = parseFloat(recurringIncomeResult.rows[0].total)+ parseFloat(oneTimeIncomeResult.rows[0].total)
 
       const totalExpenses = expensesByCategoryResult.rows.reduce((sum, row) => sum + parseFloat(row.total), 0)
 
       const savings = totalIncome - totalExpenses
 
-      const savingsRate = totalIncome > 0 ? ((savings / totalIncome) * 100).toFixed(1): 0
-                        
+      const savingsRate = totalIncome > 0? ((savings / totalIncome) * 100).toFixed(1):0
 
       res.json({
-        period: isYearly ? 'yearly' : 'monthly',
-        month: isYearly ? null : (month || new Date().getMonth() + 1),
-        year: year || new Date().getFullYear(),
+        period,
+        from: fromDate.toISOString().split('T')[0],
+        to: toDate.toISOString().split('T')[0],
         total_income: totalIncome,
         total_expenses: totalExpenses,
         savings,
         savings_rate: parseFloat(savingsRate),
-        expenses_by_category: expensesByCategoryResult.rows
+        top_expense_category: topExpenseCategory,
+        biggest_transaction: biggestTransactionResult.rows[0] || null,
+        expenses_by_category: expensesByCategoryResult.rows,
+        income_breakdown: {
+          recurring: incomeSourcesResult.rows,
+          one_time: oneTimeIncomeBreakdownResult.rows
+        }
       })
-
     } catch (err) {
       res.status(500).json({ error: err.message })
     }

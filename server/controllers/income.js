@@ -18,6 +18,101 @@ export const getIncomeSources=async (req, res) => {
     }
 }
 
+
+export const getIncomeByRange = async (req, res) => {
+    const userId = req.user.id
+    const { from, to } = req.query
+
+    if (!from || !to) {
+        return res.status(400).json({ 
+        error: 'from and to dates are required' 
+        })
+    }
+
+    const fromDate = new Date(from)
+    const toDate = new Date(to)
+
+    if (isNaN(fromDate.getTime()) || isNaN(toDate.getTime())) {
+        return res.status(400).json({ 
+        error: 'invalid date format — use YYYY-MM-DD' 
+        })
+    }
+
+    if (fromDate > toDate) {
+        return res.status(400).json({ 
+        error: 'from date cannot be after to date' 
+        })
+    }
+
+    try {
+       
+        const incomeSourcesResult = await pool.query(
+        `SELECT 
+            id,
+            label AS title,
+            amount,
+            frequency,
+            start_date,
+            'recurring' AS income_type
+        FROM income_sources
+        WHERE user_id = $1 
+        AND is_active = true
+        AND start_date <= $2`,
+        [userId, toDate]
+        )
+
+        
+        const incomeTransactionsResult = await pool.query(
+        `SELECT 
+            t.id,
+            COALESCE(t.note, 'One time income') AS title,
+            t.amount,
+            t.date,
+            'one_time' AS income_type
+        FROM transactions AS t
+        WHERE t.user_id = $1 
+        AND t.type = 'income'
+        AND t.date >= $2
+        AND t.date <= $3`,
+        [userId, fromDate, toDate]
+        )
+
+        const recurringWithTotal = incomeSourcesResult.rows.map(source => {
+            const start = new Date(
+                Math.max(new Date(source.start_date), fromDate)
+            )
+            const monthsInRange = 
+                (toDate.getFullYear() - start.getFullYear()) * 12 +
+                (toDate.getMonth() - start.getMonth()) + 1
+
+            return {
+                ...source,
+                months_in_range: monthsInRange,
+                total_for_range: parseFloat(source.amount) * monthsInRange
+            }
+        })
+
+        const allIncome = [
+        ...recurringWithTotal,
+        ...incomeTransactionsResult.rows
+        ]
+
+        const total = [
+        ...recurringWithTotal.map(s => s.total_for_range),
+        ...incomeTransactionsResult.rows.map(t => parseFloat(t.amount))
+        ].reduce((sum, amount) => sum + amount, 0)
+
+        res.json({
+        from,
+        to,
+        total,
+        income: allIncome
+        })
+    } catch (err) {
+        res.status(500).json({ error: err.message })
+    }
+}
+
 export const addIncomeSources=async (req,res)=>{
     const userId=req.user.id;
     const { label, amount, frequency, start_date } = req.body;
