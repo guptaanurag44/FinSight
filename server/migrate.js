@@ -8,15 +8,18 @@ const __dirname= path.dirname(fileURLToPath(import.meta.url))
 const runMigration=async () => {
   try {
     console.log('Running migrations...')
+    const migrationFiles=['001_schema.sql','002_portfolio_schema.sql']
     
-    const sql = fs.readFileSync(
-      path.join(__dirname, 'schema.sql'), 
-      'utf8'
-    )
-    
-    await pool.query(sql)
-    console.log('All tables created successfully')
+    for(let file=0;file<migrationFiles.length;file++){
+      const sql=fs.readFileSync(path.join(__dirname,migrationFiles[file]),'utf-8')
+      await pool.query(sql)
+      console.log(`${migrationFiles[file]}table created successfully`)
+    }
+    console.log('All migrations completed')
     process.exit(0)
+
+    
+
   } catch (err) {
     console.error('Migration failed:', err.message)
     process.exit(1)

@@ -1,4 +1,5 @@
 import pool from '../config/db.js'
+import { invalidateCache } from './ai.js'
 
 export const getGoals = async (req, res) => {
     const userId = req.user.id
@@ -65,6 +66,8 @@ export const addGoal = async (req, res) => {
             created_at`,
         [userId, title, target_amount, current_saved || 0, target_date]
         )
+
+        await invalidateCache(userId)
         res.status(201).json(rows[0])
     } catch (err) {
         res.status(500).json({ error: err.message })
@@ -159,6 +162,7 @@ export const updateGoal = async (req, res) => {
             , 1) AS percentage_completed`,
         [title, target_amount, target_date, current_saved, finalStatus, goalId, userId]
         )
+        await invalidateCache(userId)
         res.json(rows[0])
     } catch (err) {
         res.status(500).json({ error: err.message })
@@ -185,6 +189,7 @@ export const deleteGoal = async (req, res) => {
         WHERE id = $1 AND user_id = $2`,
         [goalId, userId]
         )
+        await invalidateCache(userId)
         res.json({ message: 'Goal deleted successfully' })
     } catch (err) {
         res.status(500).json({ error: err.message })

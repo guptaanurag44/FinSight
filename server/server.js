@@ -5,6 +5,7 @@ import incomeRoutes from "./routes/income.js"
 import catagoryRoutes from "./routes/catagories.js"
 import transactionRoutes from "./routes/transactions.js"
 import goalRoutes from "./routes/goals.js"
+import aiRoutes from "./routes/ai.js"
 
 const app=express();
 const PORT= process.env.PORT || 5000
@@ -20,6 +21,7 @@ app.use('/api/income',incomeRoutes)
 app.use('/api/catagories',catagoryRoutes)
 app.use('/api/transactions',transactionRoutes)
 app.use('/api/goals',goalRoutes)
+app.use('/api/ai', aiRoutes)
 
 app.listen(PORT,()=>{
     console.log(`server is running on port ${PORT}`);
