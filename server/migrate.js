@@ -8,7 +8,7 @@ const __dirname= path.dirname(fileURLToPath(import.meta.url))
 const runMigration=async () => {
   try {
     console.log('Running migrations...')
-    const migrationFiles=['001_schema.sql','002_portfolio_schema.sql']
+    const migrationFiles=['001_schema.sql','002_portfolio_schema.sql','003_mf_nav.sql','004_nse_stocks.sql']
     
     for(let file=0;file<migrationFiles.length;file++){
       const sql=fs.readFileSync(path.join(__dirname,migrationFiles[file]),'utf-8')

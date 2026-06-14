@@ -26,6 +26,7 @@ CREATE TABLE IF NOT EXISTS mf_holdings (
     portfolio_id UUID NOT NULL,
     user_id UUID NOT NULL,
     fund_name VARCHAR(150) NOT NULL,
+    scheme_code VARCHAR(20) NOT NULL,
     folio_number VARCHAR(50),
     units DECIMAL(12,4) NOT NULL,
     nav_at_purchase DECIMAL(12,4) NOT NULL,
@@ -63,6 +64,8 @@ CREATE TABLE IF NOT EXISTS stock_prices (
     market_cap BIGINT,
     last_updated TIMESTAMP DEFAULT NOW()
 );
+
+
 
 CREATE INDEX IF NOT EXISTS idx_portfolios_user_id 
   ON portfolios(user_id);
